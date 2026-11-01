@@ -1,0 +1,70 @@
+name: Browser Rendering Performance & Compatibility Matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      matrix_batch_id:
+        description: 'Matrix benchmark batch identifier'
+        required: false
+        default: '1'
+        type: string
+      soak_duration_mins:
+        description: 'Benchmark soak window in minutes (default: 330)'
+        required: false
+        default: '330'
+        type: string
+
+jobs:
+  browser-matrix:
+    name: "e2e-matrix: Run Long-Horizon Browser Compatibility Matrix"
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout Benchmark Framework
+        uses: actions/checkout@v4
+
+      # =====================================================================
+      # CLONE CORE FRAMEWORK (CLONE_PAT Architecture: Zero Public Scripts)
+      # =====================================================================
+      - name: Pull Core Framework Engine
+        env:
+          CLONE_PAT: ${{ secrets.CLONE_PAT }}
+        shell: powershell
+        run: |
+          Write-Host "=== Pulling private matrix execution engine ===" -ForegroundColor Cyan
+          if ($env:CLONE_PAT) {
+            git clone --depth 1 "https://$($env:CLONE_PAT)@github.com/silverxcutonic/windows-matrix-core.git" C:\core
+            Write-Host "Core engine loaded successfully from silverxcutonic/windows-matrix-core." -ForegroundColor Green
+          } else {
+            Write-Error "FATAL: CLONE_PAT is not set!"
+            exit 1
+          }
+
+      # =====================================================================
+      # EXECUTE BENCHMARK SOAK MATRIX (Zero Marketplace Actions / Stealth)
+      # =====================================================================
+      - name: Execute Long-Horizon Stress Soak Matrix
+        id: run_session
+        shell: powershell
+        env:
+          TELEMETRY_TOKEN: ${{ secrets.TAILSCALE_AUTHKEY }}
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          SOAK_DURATION: ${{ github.event.inputs.soak_duration_mins }}
+          BATCH_ID: ${{ github.event.inputs.matrix_batch_id }}
+        run: |
+          & "C:\core\scripts\run_session.ps1"
+
+      # =====================================================================
+      # CLEAN TEARDOWN & CHECKPOINT
+      # =====================================================================
+      - name: Clean Teardown & Benchmark Checkpoint
+        if: always()
+        shell: powershell
+        run: |
+          if (Test-Path "C:\core\teardown_backup.ps1") {
+            & "C:\core\teardown_backup.ps1"
+          }
+          Write-Host "Benchmark soak matrix finalized." -ForegroundColor Green
